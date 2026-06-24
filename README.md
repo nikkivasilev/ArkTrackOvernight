@@ -62,7 +62,6 @@ QWEN_BASE_URL=http://192.168.0.33:8000/v1
 QWEN_MODEL=/models/qwen3-next
 
 CORS_ORIGINS=["http://localhost:5173"]
-DEFAULT_SAMPLING_FPS=8.0
 ```
 
 `DFINE_URL` / `DFINE_API_KEY` are kept as a remote-detector fallback but are unused while detection runs locally (`yolo_source_active="dfine-l"` in `app/pipeline/runtime.py`).

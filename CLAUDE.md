@@ -62,14 +62,24 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## What This Project Is
 
-A full-stack, real-time AI surveillance platform with two coexisting inference flows:
+ArkTrack analyses factory video — uploaded recordings or live RTSP cameras — with an
+in-process AI pipeline (D-FINE-L detection → ByteTrack tracking → activity / VLM
+classification → polygon zones) and turns it into workforce and per-zone
+occupancy/activity metrics. The core value proposition: **operators see meaning, not footage.**
 
-1. **General surveillance** D-FINE-L → anomaly score → rule match → conclusion. Trigger types: `detection`, `duration`, `count`, `absence`.
-2. **Resting-worker detection** — D-FINE-L + ByteTrack → two-tier motion analysis → 3-second pre-incident clip → Qwen VLM verification → conclusion. Trigger type: `resting_worker`.
+It runs the same pipeline (`app.pipeline.runtime.CameraPipeline`) two ways:
 
-Both flows share the same FastAPI app, Postgres schema, Redis stream, Celery worker pool, WebSocket broadcaster, and React frontend. They diverge only at the detection worker (whose single frame decode is reused for both paths) and at their final Conclusion-creation step.
+1. **Offline overnight batch** *(current primary use case)* — `app.offline` ingests
+   recordings dropped into a watched folder, runs each through the pipeline headless,
+   writes metrics to Postgres, and generates per-day / per-period **PDF reports**.
+2. **Live monitoring** — one async worker per camera drives the pipeline in real time,
+   streaming an annotated MJPEG feed plus live workforce + zone-occupancy metrics to the
+   React UI over WebSockets.
 
-The core value proposition: **operators see meaning, not footage.**
+Both share one FastAPI app, one Postgres database, and the vendored detection pipeline.
+Alerting exists but is intentionally minimal (only `detection` and `count` rule triggers
+evaluate; `duration` / `absence` / `resting_worker` are stubs) — the product focus is
+**detection metrics**, not alerts.
 
 
 ---
@@ -96,16 +106,16 @@ The core value proposition: **operators see meaning, not footage.**
 ### Backend
 - **Language**: Python 3.11+
 - **API Framework**: FastAPI (async throughout)
-- **Stream Server**: MediaMTX (RTSP + file relay)
-- **Frame Queue**: Redis Streams
-- **AI — Detection**: D-FINE-L (at server)
-- **Task Queue**: Celery + Redis (clip extraction, email alerts)
-- **Database**: PostgreSQL + TimescaleDB extension
-- **ORM**: SQLAlchemy 2.0 async
-- **Migrations**: Alembic
-- **Storage**: MinIO (local dev) / S3-compatible (prod) — event clips + frame snapshots
-- **Real-time**: FastAPI native WebSockets
-- **Auth**: JWT (access + refresh tokens), bcrypt
+- **Detection**: D-FINE-L in-process via ONNX Runtime (CPU by default; CUDA / TensorRT FP16 optional execution providers)
+- **Tracking**: ByteTrack (supervision) + HSV-histogram ID recovery
+- **Activity classification**: local SigLIP (ONNX, default) or a remote Qwen VLM over HTTP (optional)
+- **Video I/O**: OpenCV — uploaded files + RTSP, read directly (no separate stream server)
+- **Database**: PostgreSQL via SQLAlchemy 2.0 async + asyncpg
+- **Schema**: `Base.metadata.create_all` + idempotent `ALTER`s at startup (no migration tool)
+- **Storage**: local filesystem under `backend/data/` (uploads, alert thumbnails, generated PDF reports)
+- **Offline batch / reports**: `app.offline` (folder ingest → headless pipeline → metrics → PDF via fpdf2 + matplotlib)
+- **Real-time**: FastAPI native WebSockets + in-process broadcaster
+- **Auth**: none (single-operator deployment)
 
 ### Frontend
 - **Framework**: React 18 + Vite

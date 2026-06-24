@@ -21,12 +21,6 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5173"]
 
-    inference_semaphore_size: int = 4
-    # New cameras sample at 8 fps — enough position history for the motion
-    # heuristic to classify walking/standing instead of falling back to
-    # `unknown`. The pipeline is otherwise fps-aware (ByteTrack frame_rate,
-    # motion-tracker target_fps, all timeouts in seconds).
-    default_sampling_fps: float = 8.0
     # File-source pre-buffer: hold this many seconds of processed output
     # before emitting the first frame, then emit at source-native pace so
     # the live MJPEG plays smoothly even when the detector latency varies.
