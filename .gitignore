@@ -1,0 +1,31 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+backend/.env
+backend/data/
+node_modules/
+dist/
+.vite/
+.idea/
+.vscode/
+*.log
+cam2.mp4
+
+# Model artifacts — large, derived, and regenerable via backend/tools/export_*.py.
+# Covers: D-FINE ONNX (~120 MB), SigLIP ONNX + its external weights
+# `*.onnx.data` (~1.7 GB!) + label embeddings `*.npy`, and the TensorRT engine
+# cache (trt_cache/, ~70 MB). All over GitHub's 100 MB/file limit. The dir is
+# recreated by the export tools / at runtime.
+backend/checkpoints/
+
+# ORT profiling dumps generated when enable_profiling=True. Debug-only.
+backend/onnxruntime_profile_*.json
+onnxruntime_profile_*.json
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/*
+  Tailwind v4 token bridge — @theme inline so tokens reference CSS vars
+  from styles.css rather than baking in literal values.
+*/
+
+@theme {
+  /* === Existing utilities (keep all current class names working) === */
+  --color-bg:       var(--bg);
+  --color-panel:    var(--panel);
+  --color-panel-2:  var(--panel-2);
+  --color-muted:    var(--muted);
+  --color-border:   var(--border);
+  --color-text:     var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-accent:    var(--accent);
+  --color-accent-bg: var(--accent-bg);
+  --color-accent-2:  var(--accent-2);
+  --color-tertiary:  var(--tertiary);
+  --color-cyan:     var(--cyan);
+  --color-amber:      var(--accent-amber);
+  --color-warn:       var(--warn);
+  --color-warn-muted: var(--warn-muted);
+  --color-danger:   var(--danger);
+
+  /* Surface ramp + glass */
+  --color-surface-low:       var(--surface-low);
+  --color-surface-container:  var(--surface-container);
+  --color-surface-high:      var(--surface-high);
+  --color-surface-highest:   var(--surface-highest);
+  --color-on-surface:        var(--text);
+  --color-on-surface-variant: var(--text-dim);
+  --color-outline:           var(--outline);
+  --color-text-mute:         var(--text-mute);
+
+  /* === Semantic tokens (used by new primitives) === */
+  /* Alpha tint utilities */
+  --color-accent-10:   var(--accent-10);
+  --color-accent-15:   var(--accent-15);
+  --color-accent-20:   var(--accent-20);
+  --color-accent-30:   var(--accent-30);
+  --color-accent-35:   var(--accent-35);
+  --color-accent-40:   var(--accent-40);
+  --color-accent-50:   var(--accent-50);
+  --color-accent-60:   var(--accent-60);
+  --color-accent-2-15: var(--accent-2-15);
+  --color-accent-2-35: var(--accent-2-35);
+  --color-amber-15:    var(--amber-15);
+  --color-amber-30:    var(--amber-30);
+  --color-amber-35:    var(--amber-35);
+  --color-danger-10:   var(--danger-10);
+  --color-danger-15:   var(--danger-15);
+  --color-danger-35:   var(--danger-35);
+  --color-danger-60:   var(--danger-60);
+  --color-text-dim-15: var(--text-dim-15);
+  --color-text-dim-30: var(--text-dim-30);
+  --color-panel-50:    var(--panel-50);
+  --color-panel-2-60:  var(--panel-2-60);
+
+  --color-background:           var(--bg);
+  --color-foreground:           var(--text);
+  --color-card:                 var(--panel);
+  --color-card-foreground:      var(--text);
+  --color-popover:              var(--panel-2);
+  --color-popover-foreground:   var(--text);
+  --color-primary:              var(--accent);
+  --color-primary-foreground:   var(--accent-bg);
+  --color-secondary:            var(--panel-2);
+  --color-secondary-foreground: var(--text);
+  --color-muted-foreground:     var(--text-dim);
+  --color-destructive:          var(--danger);
+  --color-ring:                 var(--accent);
+  --color-input:                var(--input-border);
+
+  /* === Fonts ===
+     body → Outfit; headlines (font-display) + labels/eyebrows/numerics (font-mono slot) → Space Grotesk */
+  --font-sans:    'Outfit Variable', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    'Space Grotesk Variable', ui-monospace, "Fira Code", Consolas, monospace;
+  --font-display: 'Space Grotesk Variable', system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+
+  /* === Radius scale — uniform 6px === */
+  --radius:       6px;
+  --radius-panel: 6px;
+  --radius-data:  6px;
+  --radius-sm:    6px;
+  --radius-md:    6px;
+  --radius-lg:    6px;
+  --radius-xl:    6px;
+
+  /* === Type scale (Space Grotesk display/label/data, Outfit body) === */
+  --text-headline-xl: 48px;
+  --text-headline-xl--line-height: 56px;
+  --text-headline-xl--letter-spacing: -0.02em;
+  --text-headline-xl--font-weight: 700;
+
+  --text-headline-lg: 32px;
+  --text-headline-lg--line-height: 40px;
+  --text-headline-lg--letter-spacing: -0.01em;
+  --text-headline-lg--font-weight: 600;
+
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 32px;
+  --text-headline-md--font-weight: 600;
+
+  --text-stats: 40px;
+  --text-stats--line-height: 48px;
+  --text-stats--letter-spacing: 0.02em;
+  --text-stats--font-weight: 500;
+
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 28px;
+
+  --text-label-caps: 12px;
+  --text-label-caps--line-height: 16px;
+  --text-label-caps--letter-spacing: 0.1em;
+  --text-label-caps--font-weight: 600;
+
+  --text-code-data: 14px;
+  --text-code-data--line-height: 20px;
+}
