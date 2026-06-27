@@ -9,22 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_db
 from app.models import Camera, Zone
 from app.schemas import ZoneCreate, ZoneOut, ZoneUpdate
-from app.workers import registry
 
 router = APIRouter()
-
-
-async def _push_excluded_to_pipeline(db: AsyncSession, camera_id: UUID) -> None:
-    """If the camera's pipeline is running, refresh its excluded-zone polygons
-    so the worker stops dropping (or starts dropping) tracks immediately."""
-    pipeline = registry.get_pipeline(camera_id)
-    if pipeline is None:
-        return
-    q = await db.execute(
-        select(Zone).where(Zone.camera_id == camera_id, Zone.excluded.is_(True))
-    )
-    polys = [list(z.polygon) for z in q.scalars().all()]
-    pipeline.set_excluded_zones(polys)
 
 
 def _validate_polygon(polygon: list[list[float]]) -> None:
@@ -55,8 +41,6 @@ async def create_zone(
     db.add(zone)
     await db.commit()
     await db.refresh(zone)
-    if zone.excluded:
-        await _push_excluded_to_pipeline(db, camera_id)
     return ZoneOut.model_validate(zone)
 
 
@@ -75,13 +59,10 @@ async def update_zone(
         raise HTTPException(status_code=404, detail="zone not found")
     if payload.name is not None:
         zone.name = payload.name
-    excluded_changed = payload.excluded is not None and payload.excluded != zone.excluded
     if payload.excluded is not None:
         zone.excluded = payload.excluded
     await db.commit()
     await db.refresh(zone)
-    if excluded_changed:
-        await _push_excluded_to_pipeline(db, zone.camera_id)
     return ZoneOut.model_validate(zone)
 
 
@@ -90,10 +71,6 @@ async def delete_zone(zone_id: UUID, db: AsyncSession = Depends(get_db)) -> dict
     zone = await db.get(Zone, zone_id)
     if zone is None:
         raise HTTPException(status_code=404, detail="zone not found")
-    cam_id = zone.camera_id
-    was_excluded = zone.excluded
     await db.delete(zone)
     await db.commit()
-    if was_excluded:
-        await _push_excluded_to_pipeline(db, cam_id)
     return {"ok": True}

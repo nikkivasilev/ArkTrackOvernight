@@ -62,24 +62,26 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## What This Project Is
 
-ArkTrack analyses factory video — uploaded recordings or live RTSP cameras — with an
-in-process AI pipeline (D-FINE-L detection → ByteTrack tracking → activity / VLM
-classification → polygon zones) and turns it into workforce and per-zone
-occupancy/activity metrics. The core value proposition: **operators see meaning, not footage.**
+ArkTrack analyses factory video with an in-process AI pipeline (D-FINE-L detection →
+ByteTrack tracking → activity / VLM classification → polygon zones) and turns it into
+workforce and per-zone occupancy/activity metrics. The core value proposition:
+**operators see meaning, not footage.**
 
-It runs the same pipeline (`app.pipeline.runtime.CameraPipeline`) two ways:
+The workflow is **overnight batch analysis → reports**:
 
-1. **Offline overnight batch** *(current primary use case)* — `app.offline` ingests
-   recordings dropped into a watched folder, runs each through the pipeline headless,
-   writes metrics to Postgres, and generates per-day / per-period **PDF reports**.
-2. **Live monitoring** — one async worker per camera drives the pipeline in real time,
-   streaming an annotated MJPEG feed plus live workforce + zone-occupancy metrics to the
-   React UI over WebSockets.
+- **Offline batch** — `app.offline` ingests recordings dropped into a watched folder,
+  runs each through the pipeline (`app.pipeline.runtime.CameraPipeline`) headless,
+  writes metrics to Postgres, and generates per-day / per-period **PDF reports**.
+  Cameras are created automatically from the NVR filenames.
+- **Web app** (React + FastAPI) — view the analysis: a **Dashboard** (factory-wide
+  workforce analytics over day/week/month or any custom date range, with PDF export),
+  per-camera **Analysis** (workforce + per-zone breakdowns, read from the persisted
+  `metric_samples`), and the ingest **Recordings** ledger. It is also where you
+  **configure**: draw polygon **Zones** and assign **Rules** to cameras/zones.
 
-Both share one FastAPI app, one Postgres database, and the vendored detection pipeline.
-Alerting exists but is intentionally minimal (only `detection` and `count` rule triggers
-evaluate; `duration` / `absence` / `resting_worker` are stubs) — the product focus is
-**detection metrics**, not alerts.
+One FastAPI app + one Postgres database back both. Rules are stored as configuration
+(zone/rule assignment); rule *evaluation* / alerting is not implemented. There is no
+live feed — the real-time camera path was removed; analysis is read from stored metrics.
 
 
 ---

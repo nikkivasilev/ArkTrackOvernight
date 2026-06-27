@@ -1,83 +1,62 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, Zone } from "../../api/client";
-import type { MetricsSummary } from "../../hooks/useEventsWS";
+import type { MetricsSummary } from "../../types";
 import { ZoneCard, type ChartView } from "./ZoneCard";
 
 /**
- * Per-zone breakdown panel, embedded in the Live tab below the workflow
- * analysis. For each monitored zone it shows (a) what was being done there —
- * the activity breakdown ("30% welding, 10% idle, …"), worker-weighted over
- * the selectable window — and (b) how worker-time split across occupancy
- * levels, with "understaffed time (< N people)" derived client-side from the
- * occupancy histogram. N is query-time; nothing is baked into capture.
+ * Per-zone breakdown panel. For each monitored zone it shows (a) what was being
+ * done there — the activity breakdown ("30% welding, 10% idle, …"),
+ * worker-weighted over the selected range — and (b) how worker-time split
+ * across occupancy levels, with "understaffed time (< N people)" derived
+ * client-side from the occupancy histogram. N is query-time; nothing is baked
+ * into capture.
  *
- * Mirrors AnalysisPanel's data plumbing: the default 600 s window is driven by
- * the live WS `state.metrics` (which now carries `zone_occupancy`); other
- * windows fetch once from GET /api/cameras/{id}/metrics and refresh on a timer.
- * The per-zone card itself lives in ./ZoneCard (shared with the Reports page).
+ * Reads the persisted metric_samples table via
+ * GET /api/cameras/{id}/metrics?since=&until=. The per-zone card itself lives in
+ * ./ZoneCard (shared with the Reports page).
  */
 
-const WINDOWS: { label: string; value: number }[] = [
-  { label: "1 min", value: 60 },
-  { label: "10 min", value: 600 },
-  { label: "Session", value: 0 },
-  { label: "24h", value: 86400 },
+const RANGES: { label: string; days: number }[] = [
+  { label: "24h", days: 1 },
+  { label: "7 days", days: 7 },
+  { label: "30 days", days: 30 },
 ];
 
-export default function ZoneOccupancyPanel({
-  cameraId,
-  liveMetrics,
-}: {
-  cameraId: string;
-  liveMetrics?: MetricsSummary;
-}) {
-  const [windowS, setWindowS] = useState(600);
+export default function ZoneOccupancyPanel({ cameraId }: { cameraId: string }) {
+  const [days, setDays] = useState(1);
   const [view, setView] = useState<ChartView>("bars");
-  const [fetched, setFetched] = useState<MetricsSummary | null>(null);
+  const [metrics, setMetrics] = useState<MetricsSummary | undefined>(undefined);
   const [zones, setZones] = useState<Zone[]>([]);
 
   useEffect(() => {
     api.listZones(cameraId).then(setZones).catch(() => setZones([]));
   }, [cameraId]);
 
-  // Non-default windows pull a snapshot from REST (the WS only carries 600 s).
   useEffect(() => {
-    if (windowS === 600) {
-      setFetched(null);
-      return;
-    }
     let alive = true;
     const pull = async () => {
       try {
-        let url: string;
-        if (windowS === 86400) {
-          const until = new Date();
-          const since = new Date(until.getTime() - 86400_000);
-          url =
-            `/api/cameras/${cameraId}/metrics` +
-            `?since=${encodeURIComponent(since.toISOString())}` +
-            `&until=${encodeURIComponent(until.toISOString())}`;
-        } else {
-          url = `/api/cameras/${cameraId}/metrics?window_s=${windowS}`;
-        }
+        const until = new Date();
+        const since = new Date(until.getTime() - days * 86400_000);
+        const url =
+          `/api/cameras/${cameraId}/metrics` +
+          `?since=${encodeURIComponent(since.toISOString())}` +
+          `&until=${encodeURIComponent(until.toISOString())}`;
         const r = await fetch(url);
         if (!r.ok) return;
         const j = await r.json();
-        if (alive) setFetched(j.metrics as MetricsSummary);
+        if (alive) setMetrics(j.metrics as MetricsSummary);
       } catch {
         /* transient — keep last snapshot */
       }
     };
     pull();
-    const interval = windowS === 86400 ? 30000 : 5000;
-    const timer = setInterval(pull, interval);
+    const timer = setInterval(pull, 30000);
     return () => {
       alive = false;
       clearInterval(timer);
     };
-  }, [cameraId, windowS]);
-
-  const metrics = windowS === 600 ? liveMetrics : fetched ?? undefined;
+  }, [cameraId, days]);
 
   // Join occupancy (keyed by zone_id) to names; skip excluded zones.
   const nameById = useMemo(() => {
@@ -112,11 +91,11 @@ export default function ZoneOccupancyPanel({
             ))}
           </div>
           <div className="window-tabs">
-            {WINDOWS.map((w) => (
+            {RANGES.map((w) => (
               <button
-                key={w.value}
-                className={`window-tab ${windowS === w.value ? "on" : ""}`}
-                onClick={() => setWindowS(w.value)}
+                key={w.days}
+                className={`window-tab ${days === w.days ? "on" : ""}`}
+                onClick={() => setDays(w.days)}
               >
                 {w.label}
               </button>
@@ -127,8 +106,9 @@ export default function ZoneOccupancyPanel({
 
       {cards.length === 0 ? (
         <div className="hint">
-          No monitored zones with occupancy data for this window yet. Draw a zone
-          (not marked "not monitored") on the Zones tab and let the camera run.
+          No monitored zones with occupancy data for this range yet. Draw a zone
+          (not marked "not monitored") on the Zones tab; data appears after the
+          overnight batch processes footage.
         </div>
       ) : (
         cards.map((c) => (

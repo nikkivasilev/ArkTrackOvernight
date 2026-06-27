@@ -16,6 +16,7 @@ from app.models import Factory
 from app.offline.day_summary import (
     build_day_summary,
     build_month_summary,
+    build_range_summary,
     build_week_summary,
 )
 from app.offline.report_pdf import render_period_pdf
@@ -79,6 +80,27 @@ async def generate_report(
     logger.info(
         "report %s %s %s -> %s (%d cameras, %.1f worker-hours)",
         fac_name, period, summary.start, path, len(summary.cameras),
+        summary.factory_summary["worker_seconds"] / 3600.0,
+    )
+    return path
+
+
+async def generate_range_report(
+    factory: str | None, start: date, end: date,
+    tz: ZoneInfo | None = None, out_dir: Path | None = None,
+) -> Path:
+    """Render a factory report PDF for an arbitrary inclusive date range."""
+    tz = tz or ZoneInfo(settings.factory_tz)
+    out_dir = out_dir or settings.offline_report_dir
+    fac_id, fac_name = await resolve_factory(factory)
+    async with SessionLocal() as s:
+        summary = await build_range_summary(s, fac_id, start, end, tz=tz)
+    safe = "".join(c if c.isalnum() or c in " -_" else "_" for c in fac_name).strip()
+    out_path = Path(out_dir) / f"range_{start:%Y-%m-%d}_{end:%Y-%m-%d}_{safe}.pdf"
+    path = render_period_pdf(summary, out_path)
+    logger.info(
+        "report %s range %s..%s -> %s (%d cameras, %.1f worker-hours)",
+        fac_name, start, end, path, len(summary.cameras),
         summary.factory_summary["worker_seconds"] / 3600.0,
     )
     return path

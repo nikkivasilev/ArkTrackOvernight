@@ -1,92 +1,62 @@
 import { useEffect, useState } from "react";
-import type { MetricsSummary } from "../../hooks/useEventsWS";
+import type { MetricsSummary } from "../../types";
 import MetricsBreakdown from "./MetricsBreakdown";
 
 /**
  * Workforce analysis panel — a stacked bar of how worker-time split across
- * rollup categories over a selectable window, plus a per-activity breakdown.
- *
- * Live data arrives on the WS `state.metrics` block (default 10-min window).
- * When the operator picks a different window, we fetch it once from
- * GET /api/cameras/{id}/metrics?window_s= and keep showing that snapshot
- * until they switch again. The breakdown itself is rendered by the shared
- * <MetricsBreakdown> (also used by the dashboard's WorkforceOverview).
+ * rollup categories over a selectable historical range, plus a per-activity
+ * breakdown. Reads the persisted metric_samples table via
+ * GET /api/cameras/{id}/metrics?since=&until=. The breakdown itself is rendered
+ * by the shared <MetricsBreakdown> (also used by the dashboard's
+ * WorkforceOverview).
  */
 
-const WINDOWS: { label: string; value: number }[] = [
-  { label: "1 min", value: 60 },
-  { label: "10 min", value: 600 },
-  { label: "Session", value: 0 },
-  // 24h is served by the persisted metric_samples table (since/until).
-  // Survives restarts and includes data from stopped cameras.
-  { label: "24h", value: 86400 },
+const RANGES: { label: string; days: number }[] = [
+  { label: "24h", days: 1 },
+  { label: "7 days", days: 7 },
+  { label: "30 days", days: 30 },
 ];
 
-export default function AnalysisPanel({
-  cameraId,
-  liveMetrics,
-}: {
-  cameraId: string;
-  liveMetrics?: MetricsSummary;
-}) {
-  // Default window is 600 s — matches the window the backend folds into
-  // `state.metrics`, so the live stream can drive it with no fetch.
-  const [windowS, setWindowS] = useState(600);
-  const [fetched, setFetched] = useState<MetricsSummary | null>(null);
+export default function AnalysisPanel({ cameraId }: { cameraId: string }) {
+  const [days, setDays] = useState(1);
+  const [metrics, setMetrics] = useState<MetricsSummary | undefined>(undefined);
 
-  // For the non-default windows, pull a snapshot from REST and refresh it
-  // on an interval (the WS only carries the 600 s window).
   useEffect(() => {
-    if (windowS === 600) {
-      setFetched(null);
-      return;
-    }
     let alive = true;
     const pull = async () => {
       try {
-        let url: string;
-        if (windowS === 86400) {
-          // Historical window — hits the persisted metric_samples table.
-          const until = new Date();
-          const since = new Date(until.getTime() - 86400_000);
-          url =
-            `/api/cameras/${cameraId}/metrics` +
-            `?since=${encodeURIComponent(since.toISOString())}` +
-            `&until=${encodeURIComponent(until.toISOString())}`;
-        } else {
-          url = `/api/cameras/${cameraId}/metrics?window_s=${windowS}`;
-        }
+        const until = new Date();
+        const since = new Date(until.getTime() - days * 86400_000);
+        const url =
+          `/api/cameras/${cameraId}/metrics` +
+          `?since=${encodeURIComponent(since.toISOString())}` +
+          `&until=${encodeURIComponent(until.toISOString())}`;
         const r = await fetch(url);
         if (!r.ok) return;
         const j = await r.json();
-        if (alive) setFetched(j.metrics as MetricsSummary);
+        if (alive) setMetrics(j.metrics as MetricsSummary);
       } catch {
         /* transient — keep the last snapshot */
       }
     };
     pull();
-    // 24 h advances slowly — 30 s refresh is fine. Shorter windows want
-    // 5 s so the panel reflects live movement.
-    const interval = windowS === 86400 ? 30000 : 5000;
-    const timer = setInterval(pull, interval);
+    const timer = setInterval(pull, 30000);
     return () => {
       alive = false;
       clearInterval(timer);
     };
-  }, [cameraId, windowS]);
-
-  const metrics = windowS === 600 ? liveMetrics : fetched ?? undefined;
+  }, [cameraId, days]);
 
   return (
     <section className="analysis analysis-h">
       <div className="analysis-head">
         <h3>Workflow analysis</h3>
         <div className="window-tabs">
-          {WINDOWS.map((w) => (
+          {RANGES.map((w) => (
             <button
-              key={w.value}
-              className={`window-tab ${windowS === w.value ? "on" : ""}`}
-              onClick={() => setWindowS(w.value)}
+              key={w.days}
+              className={`window-tab ${days === w.days ? "on" : ""}`}
+              onClick={() => setDays(w.days)}
             >
               {w.label}
             </button>

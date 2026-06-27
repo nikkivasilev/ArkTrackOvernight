@@ -202,6 +202,7 @@ def render_period_pdf(summary: DaySummary, out_path: Path | None = None) -> Path
         "day": "Daily Workforce Summary",
         "week": "Weekly Workforce Summary",
         "month": "Monthly Workforce Summary",
+        "range": "Workforce Summary",
     }
     if summary.period == "week":
         subtitle = f"{summary.start:%d %b} – {summary.end:%d %b %Y}"
@@ -209,6 +210,9 @@ def render_period_pdf(summary: DaySummary, out_path: Path | None = None) -> Path
     elif summary.period == "month":
         subtitle = f"{summary.start:%B %Y}"
         default_name = f"month_{summary.start:%Y-%m}_{summary.factory_name}.pdf"
+    elif summary.period == "range":
+        subtitle = f"{summary.start:%d %b %Y} – {summary.end:%d %b %Y}"
+        default_name = f"range_{summary.start:%Y-%m-%d}_{summary.end:%Y-%m-%d}_{summary.factory_name}.pdf"
     else:
         subtitle = f"{summary.start:%A, %d %B %Y}"
         default_name = f"day_{summary.start:%Y-%m-%d}_{summary.factory_name}.pdf"

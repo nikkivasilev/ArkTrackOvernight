@@ -87,7 +87,7 @@ export default function CommandPalette() {
       const f = s ? factoryById.get(s.factory_id) : undefined;
       const to =
         s && f
-          ? `/factories/${f.id}/sites/${s.id}/cameras/${c.id}/live`
+          ? `/factories/${f.id}/sites/${s.id}/cameras/${c.id}`
           : `/dashboard`;
       list.push({
         kind: "camera",

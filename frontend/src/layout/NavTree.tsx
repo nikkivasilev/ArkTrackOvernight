@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, useParams } from "react-router-dom";
 import { api, Camera, Factory, Site } from "../api/client";
-import { useApp } from "../state/AppContext";
 import { Icon } from "../ui/Icon";
 
 const EXPAND_KEY = "navtree.expanded";
@@ -26,7 +25,6 @@ export default function NavTree({ collapsed = false }: { collapsed?: boolean }) 
   // otherwise they appear at ≥900px.
   const labelVis = collapsed ? "hidden" : "hidden min-[900px]:block";
   const footerVis = collapsed ? "hidden" : "hidden min-[900px]:flex";
-  const { cameraStatusOverrides } = useApp();
   const [factories, setFactories] = useState<Factory[]>([]);
   const [sitesByFactory, setSitesByFactory] = useState<Record<string, Site[]>>({});
   const [camerasBySite, setCamerasBySite] = useState<Record<string, Camera[]>>({});
@@ -97,7 +95,6 @@ export default function NavTree({ collapsed = false }: { collapsed?: boolean }) 
       <div className="px-2 flex flex-col gap-0.5">
         <NavItem to="/dashboard" icon="dashboard" label="Dashboard" collapsed={collapsed} />
         <NavItem to="/factories" icon="factory" label="Factory Sites" collapsed={collapsed} />
-        <NavItem to="/alerts" icon="notifications_active" label="System Alerts" collapsed={collapsed} />
       </div>
 
       {/* Factory tree */}
@@ -155,8 +152,7 @@ export default function NavTree({ collapsed = false }: { collapsed?: boolean }) 
                               </li>
                             )}
                             {cams.map((c) => {
-                              const status =
-                                cameraStatusOverrides[c.id]?.status ?? c.status;
+                              const status = c.status;
                               return (
                                 <li key={c.id}>
                                   <CameraRow

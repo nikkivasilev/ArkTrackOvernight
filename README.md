@@ -1,6 +1,6 @@
 # ArkTrack Monitoring Platform
 
-Real-time factory video monitoring. Upload an MP4 (or point at an RTSP camera), draw polygon zones, and watch the live annotated feed plus workforce + per-zone occupancy metrics stream into the React UI.
+Overnight batch analysis of factory video. Drop NVR recordings into a watched folder; the offline pipeline crunches them into workforce + per-zone occupancy/activity metrics and PDF reports. The React UI is for **viewing** the analysis (Dashboard analytics + per-camera Analysis) and **configuring** polygon zones + rules.
 
 Detection runs **in-process on the local GPU**: D-FINE-L via ONNX Runtime + **TensorRT FP16** (~14 ms/frame on an RTX 3080), ByteTrack for tracking, welding-arc + phantom-welder detection, and a remote **Qwen3-next VLM** for activity classification.
 
@@ -72,13 +72,20 @@ If the VLM endpoint is unreachable, detection/tracking still work — activity l
 
 ## Using the app
 
-1. Open <http://localhost:5173> → **Factories → site → camera** (or create a camera and upload an MP4).
-2. **Start** the camera (button on the camera page). Status goes `queued → running`.
-3. **Live** tab: annotated MJPEG feed, per-track table, **Workflow analysis** (working/moving/idle split over a window), and **Zone occupancy** (per-zone time-at-each-headcount, with a query-time "understaffed (< N people)" selector).
-4. **Zones** tab: scrub to a frame, click polygon vertices, double-click to close, name it. Mark a zone **"not monitored"** to exclude its region from detection/metrics; monitored zones feed the zone-occupancy panel.
-5. Zone metrics survive a restart — they're flushed to the `metric_samples` table every 60 s and the panel's `24h` window reads from there.
+1. **Ingest footage (the overnight batch).** Drop NVR recordings into the watched folder (`backend/data/incoming` by default) and run the offline pipeline from `backend/`:
+   ```powershell
+   .\.venv\Scripts\python.exe -m app.offline run     # ingest new files + build reports
+   # or keep watching the folder:
+   .\.venv\Scripts\python.exe -m app.offline watch
+   ```
+   Cameras are created automatically from the NVR filenames; metrics land in `metric_samples`.
+2. Open <http://localhost:5173> → **Factories → site → camera**.
+3. **Analysis** tab: **Workflow analysis** (working/moving/idle split) and **Zone breakdown** (per-zone occupancy + activity, with a query-time "understaffed (< N people)" selector), over a selectable 24h / 7d / 30d range — read from the persisted `metric_samples`.
+4. **Zones** tab: scrub to a frame, click polygon vertices, double-click to close, name it. Mark a zone **"not monitored"** to exclude its region; monitored zones feed the zone breakdown.
+5. **Rules** tab: assign detection/count rules to a camera or zone (stored as configuration).
+6. **Dashboard**: factory-wide analytics — KPIs, staffing timeline, activity + per-zone breakdowns over day/week/month or a custom date range, with **PDF export**. (Or render a PDF from the CLI: `python -m app.offline report --date YYYY-MM-DD --period day|week|month`.)
 
-> First start of any camera builds/loads the TensorRT engine. With the cache already on disk this takes a couple of seconds; a cold cache takes ~6 min (see first-time setup).
+> The first detection run builds/loads the TensorRT engine cache (if the TRT execution provider is selected). With the cache already on disk this takes a couple of seconds; a cold cache takes ~6 min (see first-time setup).
 
 ---
 
@@ -132,21 +139,22 @@ ArkTrackRefined/
       warmup_trt.py              build the TRT engine cache
       bench_dfine.py             cuda-vs-tensorrt latency bench
     app/
-      main.py                    FastAPI app + lifespan (create_all + ALTERs + stale-camera reconcile)
-      models.py                  Camera, Zone, Rule, Alert, MetricSample
-      api/                        cameras, zones, rules, alerts, control, ws, ...
+      main.py                    FastAPI app + lifespan (create_all + idempotent ALTERs)
+      models.py                  Camera, Zone, Rule, MetricSample, ProcessedRecording
+      api/                        cameras, zones, rules, control (metrics), reports, recordings, factories, sites
+      offline/                   overnight batch: folder ingest → headless pipeline → metrics → PDF reports
       pipeline/                   vendored detection pipeline (D-FINE + ByteTrack + welding + VLM + zones)
         runtime.py               CameraPipeline (per-camera) + shared detector + zone wiring
         pipeline_render.py       annotated frame + per-zone occupancy counts → state["zones"]
         dfine_detector.py        ONNX Runtime + TensorRT FP16 detector
-        vlm_classifier.py        Qwen3-next activity classifier
+        vlm_classifier.py        Qwen activity classifier (SigLIP is the default backend)
       workers/
-        camera_worker.py         one asyncio task per camera; drives the pipeline
         metrics.py               MetricsAggregator → metric_samples (incl. zone occupancy histogram)
-        rule_engine.py           legacy alert rules (detection / count_min / count_max)
-    data/                        (gitignored) uploads/ + alerts/ thumbnails
+        frame_sampler.py         video probe + frame sampling (shared by offline + zone editor)
+        zone_filter.py           per-zone membership filtering
+    data/                        (gitignored) incoming/ (drop folder) + reports/ (generated PDFs)
   frontend/
-    src/features/cameras/        LiveTab (feed + AnalysisPanel + ZoneOccupancyPanel), ZonesTab, ...
+    src/features/cameras/        AnalysisTab (AnalysisPanel + ZoneOccupancyPanel), ZonesTab, RulesTab
 ```
 
 ---
@@ -156,8 +164,7 @@ ArkTrackRefined/
 - **Backend won't start, `ConnectionRefused`** → Postgres isn't up. `docker compose up -d postgres`. After a reboot the container is `Exited` — same command restarts it.
 - **Don't use `uvicorn --reload` on Windows** → it logs "Reloading…" then hangs the worker child. Restart manually after backend edits.
 - **Port 8002 already in use** (orphan from a killed uvicorn) → find + kill: `netstat -ano | findstr :8002` then `taskkill /PID <pid> /F`.
-- **Cameras stuck `running` after a restart** → worker tasks don't survive a backend restart; on startup the app sweeps stale `running`/`queued` cameras to `cancelled`. Just press **Start** again.
-- **First camera start is slow / GPU log mentions building** → TensorRT is compiling the engine (~6 min cold). Run `tools\warmup_trt.py` once to pre-build; afterwards it loads from `checkpoints/trt_cache/` in seconds. The cache invalidates if you re-export the ONNX, change GPU, or bump TensorRT major version.
+- **First offline run is slow / GPU log mentions building** → TensorRT is compiling the engine (~6 min cold). Run `tools\warmup_trt.py` once to pre-build; afterwards it loads from `checkpoints/trt_cache/` in seconds. The cache invalidates if you re-export the ONNX, change GPU, or bump TensorRT major version.
 - **No activity labels / `vlm classify failed` in the log** → the Qwen VLM at `QWEN_BASE_URL` is unreachable or overloaded. Detection still works; point `QWEN_BASE_URL` at a reachable endpoint and restart.
 - **Frontend can't reach the API** → it proxies to `:8002`; confirm the backend is up and `vite.config.ts` still targets 8002.
 
@@ -166,6 +173,6 @@ ArkTrackRefined/
 ## Known limits
 
 - **Auth: none** — single-operator deployment.
-- **Alerts** are minimal: only `detection`, `count_min`, `count_max` rule triggers evaluate; `duration` / `absence` / `resting_worker` are stubs, and count rules have no sustained-duration hysteresis. The product focus is **detection metrics** (workforce + zone occupancy), not alerting.
-- **Clips**: an alert captures a single thumbnail frame, not a video clip.
+- **Rules: assignment only** — rules are stored as configuration (per camera or zone) but are **not evaluated**; there is no alerting. The product focus is **detection metrics** (workforce + zone occupancy).
+- **No live view** — the real-time camera feed / WebSocket path was removed; the app analyses recorded footage via the overnight batch and shows the results.
 - Detection backbone, tracking, motion/pose subsystems and other locked MVP decisions are documented in `CLAUDE.md`.

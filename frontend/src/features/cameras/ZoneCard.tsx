@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import type { ZoneOccupancy, ZoneActivity } from "../../hooks/useEventsWS";
+import type { ZoneOccupancy, ZoneActivity } from "../../types";
 
 /**
  * Presentational per-zone breakdown card: a worker-weighted activity breakdown

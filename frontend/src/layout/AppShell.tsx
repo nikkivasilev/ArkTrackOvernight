@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Link, Outlet } from "react-router-dom";
-import { useApp } from "../state/AppContext";
 import NavTree from "./NavTree";
 import CommandPalette from "./CommandPalette";
 import BottomNav from "./BottomNav";
@@ -13,8 +12,6 @@ function openPalette() {
 }
 
 export default function AppShell() {
-  const { wsConnected } = useApp();
-
   // Desktop (≥900px) sidebar collapse — persisted. Below 900px the grid stays
   // an icon-rail / bottom-nav regardless, so this only affects the wide layout.
   const [collapsed, setCollapsed] = useState<boolean>(() => {
@@ -81,26 +78,6 @@ export default function AppShell() {
             <span>Search operations…</span>
           </button>
         </div>
-          <div className="ml-auto flex items-center gap-2 md:gap-3">
-            <span
-              className={`
-                inline-flex items-center gap-1.5 font-mono text-[11px] tracking-[0.16em] uppercase
-                ${wsConnected ? "text-accent" : "text-danger"}
-              `}
-            >
-              <span className="relative flex size-2">
-                {wsConnected && (
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-60" />
-                )}
-                <span
-                  className={`relative inline-flex rounded-full size-2 ${
-                    wsConnected ? "bg-accent" : "bg-danger"
-                  }`}
-                />
-              </span>
-              <span className="hidden sm:inline">{wsConnected ? "LIVE" : "OFFLINE"}</span>
-            </span>
-          </div>
       </header>
 
       <div

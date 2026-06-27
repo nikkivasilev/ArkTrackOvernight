@@ -1,16 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { NavLink, Outlet, useParams } from "react-router-dom";
 import { api, Camera } from "../../api/client";
-import { useApp } from "../../state/AppContext";
 import { CameraCtx } from "./CameraContext";
 import { Toolbar } from "../../ui/Toolbar";
-import { Button } from "../../ui/Button";
 import { CameraStatusBadge } from "./CameraStatusBadge";
 
 export default function CameraPage() {
   const { fid, sid, cid } = useParams();
   const [camera, setCamera] = useState<Camera | null>(null);
-  const { cameraStatusOverrides } = useApp();
 
   const refresh = useCallback(async () => {
     if (!cid) return;
@@ -23,19 +20,9 @@ export default function CameraPage() {
 
   if (!camera) return <div className="text-text-dim text-[13px]">Loading…</div>;
 
-  const override = cameraStatusOverrides[camera.id];
-  const status = override?.status ?? camera.status;
-  const error = (override?.error ?? camera.error) || null;
+  const status = camera.status;
+  const error = camera.error || null;
   const base = `/factories/${fid}/sites/${sid}/cameras/${cid}`;
-
-  const restart = async () => {
-    await api.startCamera(camera.id);
-    refresh();
-  };
-  const cancel = async () => {
-    await api.cancelCamera(camera.id);
-    refresh();
-  };
 
   return (
     <CameraCtx.Provider value={{ camera, refresh }}>
@@ -49,13 +36,7 @@ export default function CameraPage() {
             </span>
           </span>
         }
-      >
-        {status === "running" ? (
-          <Button tone="danger" size="sm" onClick={cancel}>Cancel</Button>
-        ) : (
-          <Button tone="primary" size="sm" onClick={restart}>Restart</Button>
-        )}
-      </Toolbar>
+      />
 
       {error && (
         <div className="mb-3 px-4 py-2 border border-danger-35 bg-danger-10 text-danger text-[12px] font-mono whitespace-pre-wrap rounded-lg">
@@ -65,7 +46,7 @@ export default function CameraPage() {
 
       <nav className="flex gap-2 mb-4">
         {[
-          ["Live", "live"],
+          ["Analysis", "analysis"],
           ["Zones", "zones"],
           ["Rules", "rules"],
         ].map(([label, slug]) => (

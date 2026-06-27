@@ -1,43 +1,26 @@
-"""Live runtime controls + metrics for a camera's pipeline.
+"""Workforce-metrics read-path for a camera.
 
 Routes:
-  POST /api/cameras/{camera_id}/modules
-      Body: {"yolo_enabled"?, "overlay_enabled"?}
-      Toggles the in-memory CameraPipeline module flags AND persists the
-      new values to ``Camera.settings.modules``. Welding/groups are no
-      longer operator-toggled (Phase 2 runs them unconditionally).
-
   GET  /api/cameras/{camera_id}/metrics?window_s= | ?since=&until=
-      Workforce-metrics summary. ``window_s`` reads the live aggregator
-      (falls back to a DB window if the camera isn't running). ``since`` +
-      ``until`` always read the ``metric_samples`` table — used for the
-      24 h / shift / daily historical reports that must survive restart.
-
-  POST /api/cameras/{camera_id}/detectors/{name}
-      Body: partial param dict. Live-tunes a detector (welding, vlm,
-      id_recovery, …) via the vendored _TuningMixin and persists the
-      values to ``Camera.settings.detectors[name]``.
-
-Phase 4 adds /presets and /presets/apply.
+      Workforce-metrics summary read from the persisted ``metric_samples``
+      table. ``window_s`` serves a trailing window (now-window_s .. now);
+      ``since`` + ``until`` serve an explicit historical range — used for the
+      24 h / shift / daily analysis views and reports.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
 from app.models import Camera, MetricSample
-from app.workers import registry
 from app.workers.metrics import derive_zone_occupancy, derive_zone_activity
 
 router = APIRouter()
-
-_MODULE_KEYS = ("yolo_enabled", "overlay_enabled")
 
 
 def _empty_summary(window_s: float = 0.0) -> dict:
@@ -64,8 +47,7 @@ async def _summary_from_db(
 ) -> dict:
     """Aggregate persisted metric buckets between two wall-clock datetimes.
 
-    Same response shape as ``MetricsAggregator.summary`` so the frontend
-    consumes one type. Returns an empty summary if no rows exist in range.
+    Returns an empty summary if no rows exist in range.
     """
     q = await db.execute(
         select(MetricSample)
@@ -125,47 +107,11 @@ async def _summary_from_db(
     }
 
 
-@router.post("/cameras/{camera_id}/modules")
-async def set_modules(
-    camera_id: UUID,
-    payload: dict[str, Any] = Body(...),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    cam = await db.get(Camera, camera_id)
-    if cam is None:
-        raise HTTPException(status_code=404, detail="camera not found")
-
-    updates = {k: bool(payload[k]) for k in _MODULE_KEYS if k in payload}
-    if not updates:
-        raise HTTPException(
-            status_code=400,
-            detail=f"send at least one of {_MODULE_KEYS}",
-        )
-
-    # Persist to Camera.settings.modules so a worker restart sees them.
-    settings = dict(cam.settings or {})
-    modules = dict(settings.get("modules") or {})
-    modules.update(updates)
-    settings["modules"] = modules
-    cam.settings = settings
-    await db.commit()
-
-    # Apply to the live pipeline if running.
-    pipeline = registry.get_pipeline(camera_id)
-    if pipeline is not None:
-        await pipeline.set_modules(**updates)
-        state = pipeline.get_module_state()
-    else:
-        state = {"running": False, **modules}
-
-    return {"camera_id": str(camera_id), "modules": state, "persisted": modules}
-
-
 @router.get("/cameras/{camera_id}/metrics")
 async def get_metrics(
     camera_id: UUID,
     window_s: float | None = Query(
-        None, ge=0.0, description="rolling window in seconds; omit / 0 = whole session"
+        None, ge=0.0, description="trailing window in seconds (now-window_s .. now)"
     ),
     since: datetime | None = Query(
         None, description="ISO-8601 start of historical window (UTC)"
@@ -179,79 +125,19 @@ async def get_metrics(
     if cam is None:
         raise HTTPException(status_code=404, detail="camera not found")
 
-    pipeline = registry.get_pipeline(camera_id)
-    metrics = getattr(pipeline, "metrics", None) if pipeline is not None else None
-
-    # Explicit historical range → always DB.
+    # Explicit historical range.
     if since is not None and until is not None:
         if until <= since:
             raise HTTPException(status_code=400, detail="until must be > since")
         summary = await _summary_from_db(db, camera_id, since, until)
-        return {
-            "camera_id": str(camera_id),
-            "running": metrics is not None,
-            "source": "db",
-            "metrics": summary,
-        }
+        return {"camera_id": str(camera_id), "source": "db", "metrics": summary}
     if (since is None) != (until is None):
         raise HTTPException(status_code=400, detail="pass both since and until, or neither")
 
-    # Live aggregator path (the common one).
-    if metrics is not None:
-        return {
-            "camera_id": str(camera_id),
-            "running": True,
-            "source": "live",
-            "metrics": metrics.summary(window_s),
-        }
-
-    # Camera not running — fall back to a DB-served window so the panel
-    # still has something to show for a stopped camera.
+    # Trailing window served from the persisted samples.
     if window_s and window_s > 0:
         now = datetime.now(timezone.utc)
         summary = await _summary_from_db(db, camera_id, now - timedelta(seconds=window_s), now)
-        return {
-            "camera_id": str(camera_id),
-            "running": False,
-            "source": "db",
-            "metrics": summary,
-        }
-    return {
-        "camera_id": str(camera_id),
-        "running": False,
-        "source": "empty",
-        "metrics": _empty_summary(),
-    }
+        return {"camera_id": str(camera_id), "source": "db", "metrics": summary}
 
-
-@router.post("/cameras/{camera_id}/detectors/{name}")
-async def set_detector_params(
-    camera_id: UUID,
-    name: str,
-    payload: dict[str, Any] = Body(...),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    cam = await db.get(Camera, camera_id)
-    if cam is None:
-        raise HTTPException(status_code=404, detail="camera not found")
-
-    pipeline = registry.get_pipeline(camera_id)
-    if pipeline is None:
-        raise HTTPException(
-            status_code=409, detail="camera not running — start it before tuning detectors"
-        )
-
-    try:
-        result = await pipeline.set_detector_params(name, payload)
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    # Persist the resolved values to Camera.settings.detectors[name].
-    settings = dict(cam.settings or {})
-    detectors = dict(settings.get("detectors") or {})
-    detectors[name] = result.get("values", {})
-    settings["detectors"] = detectors
-    cam.settings = settings
-    await db.commit()
-
-    return {"camera_id": str(camera_id), "detector": name, **result}
+    return {"camera_id": str(camera_id), "source": "empty", "metrics": _empty_summary()}

@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, Camera, Site } from "../../api/client";
-import { useApp } from "../../state/AppContext";
 import { Panel } from "../../ui/Panel";
 import { Toolbar } from "../../ui/Toolbar";
 import { Button } from "../../ui/Button";
 import { Pill, PillTone } from "../../ui/Pill";
 import { ConfirmDialog } from "../../ui/ConfirmDialog";
-import { Icon } from "../../ui/Icon";
 
 function statusTone(s: Camera["status"]): PillTone {
   switch (s) {
@@ -23,7 +21,6 @@ export default function SitePage() {
   const { fid, sid } = useParams();
   const [site, setSite] = useState<Site | null>(null);
   const [cameras, setCameras] = useState<Camera[]>([]);
-  const { cameraStatusOverrides } = useApp();
 
   const refresh = useCallback(async () => {
     if (!sid) return;
@@ -48,11 +45,7 @@ export default function SitePage() {
 
   return (
     <>
-      <Toolbar title={site.name} subtitle={site.address || `${cameras.length} cameras in this site`}>
-        <Link to={`/factories/${fid}/sites/${sid}/cameras/new`}>
-          <Button tone="primary" size="sm"><Icon name="add" size={16} /> ADD CAMERA</Button>
-        </Link>
-      </Toolbar>
+      <Toolbar title={site.name} subtitle={site.address || `${cameras.length} cameras in this site`} />
 
       {cameras.length === 0 ? (
         <Panel>
@@ -61,9 +54,8 @@ export default function SitePage() {
       ) : (
         <div className="flex flex-col gap-2">
           {cameras.map((c) => {
-            const override = cameraStatusOverrides[c.id];
-            const status = override?.status ?? c.status;
-            const error = (override?.error ?? c.error) || null;
+            const status = c.status;
+            const error = c.error || null;
             const isWarn = statusTone(status) === "warn";
             return (
               <div
@@ -97,7 +89,7 @@ export default function SitePage() {
                     body={
                       <>
                         Delete <span className="font-medium text-text">{c.name}</span> and all its
-                        zones, rules, and alerts? This cannot be undone.
+                        zones and rules? This cannot be undone.
                       </>
                     }
                     confirmLabel="DELETE"

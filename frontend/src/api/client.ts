@@ -1,4 +1,4 @@
-import type { MetricsSummary } from "../hooks/useEventsWS";
+import type { MetricsSummary } from "../types";
 
 export type Factory = { id: string; name: string; address: string | null; created_at: string };
 export type Site = { id: string; factory_id: string; name: string; address: string | null; created_at: string };
@@ -38,23 +38,6 @@ export type Rule = {
   enabled: boolean;
   created_at: string;
 };
-export type Alert = {
-  id: string;
-  camera_id: string;
-  rule_id: string;
-  zone_id: string | null;
-  severity: Severity;
-  acknowledged: boolean;
-  acknowledged_at: string | null;
-  start_timestamp_in_video: number;
-  end_timestamp_in_video: number | null;
-  wall_clock_at: string | null;
-  detection_box: { x1: number; y1: number; x2: number; y2: number } | null;
-  confidence: number | null;
-  has_clip: boolean;
-  created_at: string;
-};
-
 // ---- Offline reports / recordings ----
 export type ReportPeriod = "day" | "week" | "month";
 export type TimelinePoint = { t: string; date?: string; avg_headcount: number };
@@ -69,7 +52,7 @@ export type CameraDaySummary = {
 export type PeriodSummary = {
   factory_id: string;
   factory_name: string;
-  period: ReportPeriod;
+  period: string; // "day" | "week" | "month" | "range"
   start: string;
   end: string;
   tz: string;
@@ -138,22 +121,10 @@ export const api = {
     fetch(`${BASE}/sites/${sid}/cameras`).then(json<Camera[]>),
   listAllCameras: () => fetch(`${BASE}/cameras`).then(json<Camera[]>),
   getCamera: (cid: string) => fetch(`${BASE}/cameras/${cid}`).then(json<Camera>),
-  uploadCamera: (sid: string, file: File, name?: string, samplingFps?: number) => {
-    const fd = new FormData();
-    fd.append("file", file);
-    if (name) fd.append("name", name);
-    if (samplingFps !== undefined) fd.append("sampling_fps", String(samplingFps));
-    return fetch(`${BASE}/sites/${sid}/cameras`, { method: "POST", body: fd }).then(json<Camera>);
-  },
-  startCamera: (cid: string) =>
-    fetch(`${BASE}/cameras/${cid}/start`, { method: "POST" }).then(json<Camera>),
-  cancelCamera: (cid: string) =>
-    fetch(`${BASE}/cameras/${cid}/cancel`, { method: "POST" }).then(json<Camera>),
   deleteCamera: (cid: string) =>
     fetch(`${BASE}/cameras/${cid}`, { method: "DELETE" }).then(okOnly),
   frameUrl: (cid: string, t: number) =>
     `${BASE}/cameras/${cid}/frame?t=${encodeURIComponent(t)}`,
-  liveUrl: (cid: string) => `${BASE}/cameras/${cid}/live.mjpg`,
 
   // Zones
   listZones: (cid: string) =>
@@ -177,33 +148,6 @@ export const api = {
   deleteRule: (rid: string) =>
     fetch(`${BASE}/rules/${rid}`, { method: "DELETE" }).then(okOnly),
 
-  // Alerts
-  listAlerts: (params: { factory_id?: string; site_id?: string; camera_id?: string; acknowledged?: boolean; limit?: number } = {}) => {
-    const u = new URLSearchParams();
-    if (params.factory_id) u.set("factory_id", params.factory_id);
-    if (params.site_id) u.set("site_id", params.site_id);
-    if (params.camera_id) u.set("camera_id", params.camera_id);
-    if (params.acknowledged !== undefined) u.set("acknowledged", String(params.acknowledged));
-    if (params.limit) u.set("limit", String(params.limit));
-    return fetch(`${BASE}/alerts?${u.toString()}`).then(json<Alert[]>);
-  },
-  ackAlert: (aid: string) =>
-    fetch(`${BASE}/alerts/${aid}/ack`, { method: "POST" }).then(json<Alert>),
-  deleteAlert: (aid: string) =>
-    fetch(`${BASE}/alerts/${aid}`, { method: "DELETE" }).then((r) => {
-      if (!r.ok) throw new Error(`delete failed: ${r.status}`);
-    }),
-  alertThumbnailUrl: (aid: string) => `${BASE}/alerts/${aid}/thumbnail`,
-  alertClipUrl: (aid: string) => `${BASE}/alerts/${aid}/clip`,
-
-  // Live-pipeline controls (Phase 1: d-fine / motion / overlay)
-  setCameraModules: (cid: string, modules: Partial<{ yolo_enabled: boolean; motion_enabled: boolean; overlay_enabled: boolean }>) =>
-    fetch(`${BASE}/cameras/${cid}/modules`, {
-      method: "POST",
-      headers: jsonHeaders,
-      body: JSON.stringify(modules),
-    }).then(json<{ camera_id: string; modules: Record<string, any>; persisted: Record<string, boolean> }>),
-
   // Offline reports
   getReport: (fid: string, period: ReportPeriod, date?: string) => {
     const u = new URLSearchParams({ period });
@@ -215,6 +159,14 @@ export const api = {
     if (date) u.set("date", date);
     return `${BASE}/factories/${fid}/report.pdf?${u.toString()}`;
   },
+  getReportRange: (fid: string, start: string, end: string) =>
+    fetch(`${BASE}/factories/${fid}/report?start=${start}&end=${end}`).then(json<PeriodSummary>),
+  reportRangePdfUrl: (fid: string, start: string, end: string) =>
+    `${BASE}/factories/${fid}/report.pdf?start=${start}&end=${end}`,
+  dataExtent: (fid: string) =>
+    fetch(`${BASE}/factories/${fid}/data-extent`).then(
+      json<{ min: string | null; max: string | null }>,
+    ),
 
   // Processed-recording ledger
   listRecordings: (fid: string, status?: string) => {

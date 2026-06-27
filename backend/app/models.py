@@ -102,7 +102,6 @@ class Camera(Base):
         cascade="all, delete-orphan",
         foreign_keys="Rule.camera_id",
     )
-    alerts: Mapped[list["Alert"]] = relationship(back_populates="camera", cascade="all, delete-orphan")
 
 
 class Zone(Base):
@@ -155,38 +154,6 @@ class Rule(Base):
 
     camera: Mapped[Camera | None] = relationship(back_populates="rules", foreign_keys=[camera_id])
     zone: Mapped[Zone | None] = relationship(back_populates="rules", foreign_keys=[zone_id])
-    alerts: Mapped[list["Alert"]] = relationship(back_populates="rule", cascade="all, delete-orphan")
-
-
-class Alert(Base):
-    __tablename__ = "alerts"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    camera_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("cameras.id", ondelete="CASCADE"), index=True
-    )
-    rule_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("rules.id", ondelete="CASCADE"), index=True
-    )
-    zone_id: Mapped[uuid.UUID | None] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("zones.id", ondelete="SET NULL"), nullable=True
-    )
-    severity: Mapped[Severity] = mapped_column(Enum(Severity, name="severity"), default=Severity.warn)
-    acknowledged: Mapped[bool] = mapped_column(Boolean, default=False)
-    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    start_timestamp_in_video: Mapped[float] = mapped_column(Float)
-    end_timestamp_in_video: Mapped[float | None] = mapped_column(Float, nullable=True)
-    wall_clock_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    thumbnail_path: Mapped[str] = mapped_column(String(1024))
-    # Optional video clip on disk (resting-worker events). Null for alerts that
-    # only captured a single thumbnail frame.
-    clip_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
-    detection_box: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
-    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-
-    camera: Mapped[Camera] = relationship(back_populates="alerts")
-    rule: Mapped[Rule] = relationship(back_populates="alerts")
 
 
 class ProcessedRecording(Base):

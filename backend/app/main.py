@@ -2,15 +2,14 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text, update
+from sqlalchemy import text
 
 from app.api import (
-    alerts, cameras, control, factories, recordings, reports, rules, sites, ws, zones,
+    cameras, control, factories, recordings, reports, rules, sites, zones,
 )
 from app.config import settings
-from app.db import Base, SessionLocal, engine
+from app.db import Base, engine
 from app import models  # noqa: F401  register tables
-from app.models import Camera, CameraStatus
 
 
 @asynccontextmanager
@@ -49,24 +48,6 @@ async def lifespan(app: FastAPI):
             "ALTER TABLE metric_samples "
             "ADD COLUMN IF NOT EXISTS zone_activity_seconds JSONB NOT NULL DEFAULT '{}'::jsonb"
         ))
-        # Optional video-clip path for alerts (resting-worker event clips).
-        # Idempotent.
-        await conn.execute(text(
-            "ALTER TABLE alerts ADD COLUMN IF NOT EXISTS clip_path VARCHAR(1024)"
-        ))
-
-    # Reconcile stale `running` / `queued` Camera rows from before the restart.
-    # Worker tasks don't survive a backend restart, so any DB row in those
-    # states is a ghost — mark them cancelled so the UI shows the truth and
-    # the operator can restart them deliberately.
-    async with SessionLocal() as session:
-        result = await session.execute(
-            update(Camera)
-            .where(Camera.status.in_([CameraStatus.running, CameraStatus.queued]))
-            .values(status=CameraStatus.cancelled)
-        )
-        if result.rowcount:
-            await session.commit()
     yield
 
 
@@ -85,11 +66,9 @@ app.include_router(sites.router, prefix="/api", tags=["sites"])
 app.include_router(cameras.router, prefix="/api", tags=["cameras"])
 app.include_router(zones.router, prefix="/api", tags=["zones"])
 app.include_router(rules.router, prefix="/api", tags=["rules"])
-app.include_router(alerts.router, prefix="/api/alerts", tags=["alerts"])
 app.include_router(control.router, prefix="/api", tags=["control"])
 app.include_router(reports.router, prefix="/api", tags=["reports"])
 app.include_router(recordings.router, prefix="/api", tags=["recordings"])
-app.include_router(ws.router, prefix="/api/ws", tags=["ws"])
 
 
 @app.get("/health")

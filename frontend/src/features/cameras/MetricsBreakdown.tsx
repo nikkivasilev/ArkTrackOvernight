@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { MetricsSummary } from "../../hooks/useEventsWS";
+import type { MetricsSummary } from "../../types";
 
 /**
  * Presentational breakdown of a MetricsSummary: a stacked status (rollup) bar

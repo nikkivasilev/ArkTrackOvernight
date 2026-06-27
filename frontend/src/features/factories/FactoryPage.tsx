@@ -69,11 +69,11 @@ export default function FactoryPage() {
 
       <div className="flex flex-wrap gap-2 mb-4">
         <Link
-          to={`/factories/${fid}/reports`}
+          to={`/dashboard?factory=${fid}`}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg no-underline
                      bg-accent-15 text-accent text-[13px] font-medium hover:bg-surface-highest/40 transition-colors"
         >
-          Reports
+          Analytics
         </Link>
         <Link
           to={`/factories/${fid}/recordings`}

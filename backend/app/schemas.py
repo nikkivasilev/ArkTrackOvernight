@@ -123,33 +123,6 @@ class RuleOut(BaseModel):
     created_at: datetime
 
 
-# ---------- Alert ----------
-
-class AlertOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    id: UUID
-    camera_id: UUID
-    rule_id: UUID
-    zone_id: UUID | None
-    severity: str
-    acknowledged: bool
-    acknowledged_at: datetime | None
-    start_timestamp_in_video: float
-    end_timestamp_in_video: float | None
-    wall_clock_at: datetime | None
-    detection_box: dict[str, float] | None
-    confidence: float | None
-    created_at: datetime
-    # Read from the ORM but not serialized; surfaced as the `has_clip` flag so
-    # the frontend knows to show a video player without leaking the FS path.
-    clip_path: str | None = Field(default=None, exclude=True)
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def has_clip(self) -> bool:
-        return bool(self.clip_path)
-
-
 # ---------- Offline reports ----------
 
 class CameraDayOut(BaseModel):

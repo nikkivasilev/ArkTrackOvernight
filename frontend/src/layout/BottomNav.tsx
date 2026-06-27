@@ -4,7 +4,6 @@ import { Icon } from "../ui/Icon";
 const ITEMS: { to: string; icon: string; label: string }[] = [
   { to: "/dashboard", icon: "dashboard", label: "Dashboard" },
   { to: "/factories", icon: "factory", label: "Sites" },
-  { to: "/alerts", icon: "notifications_active", label: "Alerts" },
 ];
 
 /** Mobile-only bottom navigation (glass, docked). Hidden at md+. */

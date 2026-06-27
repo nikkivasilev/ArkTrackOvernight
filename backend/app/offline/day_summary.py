@@ -97,6 +97,7 @@ async def build_period_summary(
     start: date,
     end: date,
     bin_minutes: int = 30,
+    timeline_kind: str | None = None,
 ) -> PeriodSummary:
     """Fold every camera under a factory over [start_utc, end_utc) into a summary.
 
@@ -189,12 +190,12 @@ async def build_period_summary(
 
     cam_days.sort(key=lambda c: c.summary["worker_seconds"], reverse=True)
 
-    if period == "day":
+    kind = timeline_kind or ("intraday" if period == "day" else "daily")
+    if kind == "intraday":
         timeline = staffing_timeline(rows, start_utc, end_utc, bin_minutes)
-        timeline_kind = "intraday"
     else:
         timeline = daily_timeline(rows, start_utc, end_utc, tz)
-        timeline_kind = "daily"
+    timeline_kind = kind
 
     return PeriodSummary(
         factory_id=str(factory_id),
@@ -247,4 +248,27 @@ async def build_month_summary(
     start_utc, end_utc, start, end = month_bounds(any_day, tz)
     return await build_period_summary(
         session, factory_id, start_utc, end_utc, tz, "month", start, end
+    )
+
+
+async def build_range_summary(
+    session: AsyncSession,
+    factory_id,
+    start: date,
+    end: date,
+    tz: ZoneInfo | None = None,
+    bin_minutes: int = 30,
+) -> PeriodSummary:
+    """Arbitrary inclusive local-date range [start, end].
+
+    Same range-agnostic folding as the day/week/month builders; the timeline is
+    an intraday curve for spans up to 2 days and per-day bars beyond that.
+    """
+    tz = tz or ZoneInfo(settings.factory_tz)
+    start_utc = _local_midnight_utc(start, tz)
+    end_utc = _local_midnight_utc(end + timedelta(days=1), tz)
+    kind = "intraday" if (end - start).days <= 1 else "daily"
+    return await build_period_summary(
+        session, factory_id, start_utc, end_utc, tz, "range", start, end,
+        bin_minutes, timeline_kind=kind,
     )
